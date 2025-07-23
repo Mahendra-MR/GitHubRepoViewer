@@ -1,5 +1,7 @@
 # GitHub Repo Viewer
 
+![App Logo](app/src/main/res/mipmap-xxxhdpi/ic_launcher.png)
+
 A Android application built with **Kotlin** and **Jetpack Compose** that allows users to search GitHub profiles and view their repositories, complete with repo details, live search, pull-to-refresh, and README rendering.
 
 ---
