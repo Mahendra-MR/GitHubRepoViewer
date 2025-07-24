@@ -8,7 +8,6 @@ import com.example.githubrepoviewer.repository.GitHubRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import okhttp3.ResponseBody
 import retrofit2.HttpException
 import java.util.Base64
 
@@ -28,6 +27,12 @@ class GitHubViewModel : ViewModel() {
     private val _userProfile = MutableStateFlow<User?>(null)
     val userProfile: StateFlow<User?> = _userProfile
 
+    private val _globalStats = MutableStateFlow(Pair(0, 0))  // (repos, users)
+    val globalStats: StateFlow<Pair<Int, Int>> = _globalStats
+
+    private val _rateLimitResetTime = MutableStateFlow<Long?>(null)
+    val rateLimitResetTime: StateFlow<Long?> = _rateLimitResetTime
+
     fun fetchRepos(username: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -35,12 +40,17 @@ class GitHubViewModel : ViewModel() {
             try {
                 val repos = repository.getUserRepos(username)
                 _repos.value = repos.sortedByDescending { it.updated_at }
-                if (_repos.value.isEmpty()) {
+                if (repos.isEmpty()) {
                     _error.value = "No repositories found."
                 }
             } catch (e: HttpException) {
                 _repos.value = emptyList()
-                _error.value = if (e.code() == 404) "User not found!" else "Server error: ${e.code()}"
+                if (e.code() == 403) {
+                    checkRateLimit()
+                    _error.value = "Rate limit exceeded. Try again later."
+                } else {
+                    _error.value = if (e.code() == 404) "User not found!" else "Server error: ${e.code()}"
+                }
             } catch (e: Exception) {
                 _repos.value = emptyList()
                 _error.value = "Network error: ${e.message}"
@@ -55,8 +65,13 @@ class GitHubViewModel : ViewModel() {
             try {
                 _userProfile.value = repository.getUserProfile(username)
             } catch (e: HttpException) {
-                _error.value = if (e.code() == 404) "User not found!" else "Error fetching profile: ${e.code()}"
+                _userProfile.value = null
+                _error.value = when (e.code()) {
+                    404 -> "User not found!"
+                    else -> "Error fetching profile: ${e.code()}"
+                }
             } catch (e: Exception) {
+                _userProfile.value = null
                 _error.value = "Error fetching profile: ${e.message}"
             }
         }
@@ -64,15 +79,46 @@ class GitHubViewModel : ViewModel() {
 
     suspend fun fetchRepoReadme(username: String, repoName: String): String? {
         return try {
-            val response: ResponseBody = repository.getRepoReadme(username, repoName)
+            val response = repository.getRepoReadme(username, repoName)
             val jsonString = response.string()
+
             val contentRegex = """"content"\s*:\s*"([^"]*)"""".toRegex()
-            val encodedContent = contentRegex.find(jsonString)?.groups?.get(1)?.value?.replace("\\n", "")
+            val encodedContent = contentRegex.find(jsonString)
+                ?.groups?.get(1)?.value
+                ?.replace("\\n", "")
+
             encodedContent?.let {
                 String(Base64.getDecoder().decode(it))
             }
         } catch (e: Exception) {
             null
         }
+    }
+
+    fun fetchGlobalGitHubStats() {
+        viewModelScope.launch {
+            try {
+                val stats = repository.getGitHubGlobalStats()
+                _globalStats.value = stats
+            } catch (e: Exception) {
+                _error.value = "Error fetching GitHub global stats: ${e.message}"
+            }
+        }
+    }
+
+    private suspend fun checkRateLimit() {
+        try {
+            val response = repository.getRateLimit()
+            _rateLimitResetTime.value = response.rate.reset
+        } catch (_: Exception) {
+            // Ignore silently
+        }
+    }
+
+    fun clearUserData() {
+        _userProfile.value = null
+        _repos.value = emptyList()
+        _error.value = null
+        _rateLimitResetTime.value = null
     }
 }

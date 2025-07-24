@@ -6,11 +6,18 @@ import retrofit2.converter.gson.GsonConverterFactory
 object RetrofitClient {
     private const val BASE_URL = "https://api.github.com/"
 
-    val api: GitHubApiService by lazy {
+    private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(GitHubApiService::class.java)
+    }
+
+    val api: GitHubApiService by lazy {
+        retrofit.create(GitHubApiService::class.java)
+    }
+
+    val statsApi: GitHubStatsApiService by lazy {
+        retrofit.create(GitHubStatsApiService::class.java)
     }
 }
