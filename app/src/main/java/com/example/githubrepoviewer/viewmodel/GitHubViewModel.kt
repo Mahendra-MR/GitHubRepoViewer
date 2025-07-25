@@ -60,6 +60,7 @@ class GitHubViewModel : ViewModel() {
         }
     }
 
+    // 🔍 Public GitHub user profile fetch
     fun fetchUserProfile(username: String) {
         viewModelScope.launch {
             try {
@@ -73,6 +74,25 @@ class GitHubViewModel : ViewModel() {
             } catch (e: Exception) {
                 _userProfile.value = null
                 _error.value = "Error fetching profile: ${e.message}"
+            }
+        }
+    }
+
+    // ✅ FIXED: Authenticated GitHub user profile fetch with correct header format
+    fun fetchAuthenticatedUserProfile(token: String) {
+        viewModelScope.launch {
+            try {
+                val bearerToken = "Bearer $token"
+                _userProfile.value = repository.getAuthenticatedUserProfile(bearerToken)
+            } catch (e: HttpException) {
+                _userProfile.value = null
+                _error.value = when (e.code()) {
+                    401 -> "Unauthorized. Please login again."
+                    else -> "HTTP error ${e.code()}"
+                }
+            } catch (e: Exception) {
+                _userProfile.value = null
+                _error.value = "Error fetching authenticated profile: ${e.message}"
             }
         }
     }

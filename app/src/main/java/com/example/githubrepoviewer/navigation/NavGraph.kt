@@ -6,9 +6,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.githubrepoviewer.viewmodel.GitHubViewModel
-import com.example.githubrepoviewer.screens.DashboardScreen
-import com.example.githubrepoviewer.screens.UserResultScreen
-import com.example.githubrepoviewer.screens.RepoDetailScreen
+import com.example.githubrepoviewer.screens.*
 import com.example.githubrepoviewer.model.Repo
 import com.google.gson.Gson
 import java.net.URLDecoder
@@ -28,6 +26,8 @@ sealed class Screen(val route: String) {
             return "repo_detail?repoJson=$json"
         }
     }
+
+    object AuthenticatedProfile : Screen("authenticated_profile")
 }
 
 @Composable
@@ -62,6 +62,11 @@ fun AppNavGraph(viewModel: GitHubViewModel) {
             val decodedJson = URLDecoder.decode(encodedJson, StandardCharsets.UTF_8.toString())
             val repo = Gson().fromJson(decodedJson, Repo::class.java)
             RepoDetailScreen(repo = repo, viewModel = viewModel)
+        }
+
+        // 👤 Logged-In GitHub Profile (Authenticated)
+        composable(Screen.AuthenticatedProfile.route) {
+            UserProfileScreen() // This is the correct composable
         }
     }
 }

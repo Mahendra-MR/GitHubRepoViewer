@@ -1,18 +1,26 @@
-@file:OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@file:OptIn(
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class
+)
 
 package com.example.githubrepoviewer.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -20,22 +28,55 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.githubrepoviewer.navigation.Screen
+import com.example.githubrepoviewer.util.TokenStore
 import com.example.githubrepoviewer.viewmodel.GitHubViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun DashboardScreen(
     navController: NavController,
     viewModel: GitHubViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf(TextFieldValue("")) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val globalStats = viewModel.globalStats.collectAsState().value ?: (0 to 0)
+
+    // ✅ Observe login state reactively
+    val tokenStore = remember { TokenStore(context) }
+    val token by tokenStore.tokenFlow.collectAsState(initial = null)
+    val isLoggedIn = !token.isNullOrBlank()
 
     LaunchedEffect(Unit) {
         viewModel.fetchGlobalGitHubStats()
     }
 
-    Scaffold { paddingValues ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("🚀 GitHub Repo Viewer") },
+                actions = {
+                    SettingsMenu(
+                        isLoggedIn = isLoggedIn,
+                        onLogin = {
+                            val authUrl = "https://github-oauth-proxy-uuuo.onrender.com/login"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+                            context.startActivity(intent)
+                        },
+                        onLogout = {
+                            scope.launch {
+                                tokenStore.clearToken()
+                            }
+                        },
+                        onProfile = {
+                            navController.navigate(Screen.AuthenticatedProfile.route)
+                        }
+                    )
+                }
+            )
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -43,12 +84,6 @@ fun DashboardScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Text(
-                text = "🚀 GitHub Repo Viewer",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(top = 12.dp)
-            )
-
             SearchBar(username) { input ->
                 if (input.isNotBlank()) {
                     navController.navigate(Screen.UserResult.createRoute(input.trim()))
@@ -57,10 +92,41 @@ fun DashboardScreen(
             }
 
             GitHubStatsSection(globalStats)
-
             InsightSection()
-
             ContributionPlaceholder()
+        }
+    }
+}
+
+@Composable
+fun SettingsMenu(
+    isLoggedIn: Boolean,
+    onLogin: () -> Unit,
+    onLogout: () -> Unit,
+    onProfile: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    IconButton(onClick = { expanded = true }) {
+        Icon(Icons.Default.MoreVert, contentDescription = "Settings")
+    }
+
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        DropdownMenuItem(
+            text = { Text(if (isLoggedIn) "Logout" else "Login with GitHub") },
+            onClick = {
+                expanded = false
+                if (isLoggedIn) onLogout() else onLogin()
+            }
+        )
+        if (isLoggedIn) {
+            DropdownMenuItem(
+                text = { Text("My GitHub Profile") },
+                onClick = {
+                    expanded = false
+                    onProfile()
+                }
+            )
         }
     }
 }
@@ -75,8 +141,7 @@ fun SearchBar(username: TextFieldValue, onSearch: (String) -> Unit) {
             value = localUsername,
             onValueChange = { localUsername = it },
             label = { Text("Search GitHub Username") },
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             singleLine = true,
             keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
@@ -105,10 +170,7 @@ fun SearchBar(username: TextFieldValue, onSearch: (String) -> Unit) {
 @Composable
 fun GitHubStatsSection(globalStats: Pair<Int, Int>) {
     Column {
-        Text(
-            text = "🌍 GitHub Global Stats",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Text("🌍 GitHub Global Stats", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -142,8 +204,8 @@ fun StatCard(title: String, value: String) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = title, style = MaterialTheme.typography.bodyMedium)
-            Text(text = value, style = MaterialTheme.typography.headlineSmall)
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(value, style = MaterialTheme.typography.headlineSmall)
         }
     }
 }
@@ -151,13 +213,10 @@ fun StatCard(title: String, value: String) {
 @Composable
 fun InsightSection() {
     Column {
-        Text(
-            text = "💡 Developer Fun Fact",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Text("💡 Developer Fun Fact", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Every minute, hundreds of stars are given to GitHub repos around the world 🌟",
+            "Every minute, hundreds of stars are given to GitHub repos around the world 🌟",
             style = MaterialTheme.typography.bodyMedium
         )
     }
@@ -166,10 +225,7 @@ fun InsightSection() {
 @Composable
 fun ContributionPlaceholder() {
     Column {
-        Text(
-            text = "📈 Contribution Overview",
-            style = MaterialTheme.typography.titleMedium
-        )
+        Text("📈 Contribution Overview", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Box(
             modifier = Modifier
@@ -179,7 +235,7 @@ fun ContributionPlaceholder() {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "User contribution graph will appear here upon profile search.",
+                "User contribution graph will appear here upon profile search.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
