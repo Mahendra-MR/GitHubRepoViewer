@@ -1,5 +1,6 @@
 package com.example.githubrepoviewer.repository
 
+import android.util.Log
 import com.example.githubrepoviewer.data.RetrofitClient
 import com.example.githubrepoviewer.model.Repo
 import com.example.githubrepoviewer.model.User
@@ -18,9 +19,17 @@ class GitHubRepository {
         return RetrofitClient.api.getUserProfile(username)
     }
 
-    // 🔐 Get authenticated user profile using token (expects token already in "Bearer ..." format)
+    // 🔐 Get authenticated user profile using token - FIXED VERSION
     suspend fun getAuthenticatedUserProfile(token: String): User {
-        return RetrofitClient.api.getAuthenticatedUserProfile(token)
+        Log.d("GitHubRepository", "Making authenticated API call with token: ${token.take(10)}...")
+
+        // 🔥 FIXED: The GitHubApiService expects the full "Bearer token" format
+        // Since we're passing it directly to the @Header annotation, we need the full format
+        // The RetrofitClient interceptor should NOT add another Bearer prefix for this case
+        return RetrofitClient.api.getAuthenticatedUserProfile(
+            authHeader = "Bearer $token",
+            userAgent = "GitHubRepoViewer"
+        )
     }
 
     // 📄 Get README file of a repository

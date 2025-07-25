@@ -3,17 +3,19 @@ package com.example.githubrepoviewer.navigation
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
-import androidx.navigation.compose.*
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.githubrepoviewer.viewmodel.GitHubViewModel
-import com.example.githubrepoviewer.screens.*
 import com.example.githubrepoviewer.model.Repo
+import com.example.githubrepoviewer.screens.*
 import com.google.gson.Gson
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
-// 📌 Define navigation routes
 sealed class Screen(val route: String) {
+    object Login : Screen("login")
     object Dashboard : Screen("dashboard")
 
     object UserResult : Screen("user_result/{username}") {
@@ -31,20 +33,28 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun AppNavGraph(viewModel: GitHubViewModel) {
+fun AppNavGraph(
+    viewModel: GitHubViewModel,
+    startDestination: String = Screen.Login.route
+) {
     val navController = rememberNavController()
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Dashboard.route
+        startDestination = startDestination
     ) {
 
-        // 🏠 Dashboard (Home Page)
-        composable(Screen.Dashboard.route) {
-            DashboardScreen(navController = navController)
+        // Login Screen
+        composable(Screen.Login.route) {
+            LoginScreen(navController = navController)
         }
 
-        // 👤 User Result Screen
+        // Dashboard Screen
+        composable(Screen.Dashboard.route) {
+            DashboardScreen(navController = navController, viewModel = viewModel)
+        }
+
+        // Searched User Result
         composable(
             route = Screen.UserResult.route,
             arguments = listOf(navArgument("username") { type = NavType.StringType })
@@ -53,7 +63,7 @@ fun AppNavGraph(viewModel: GitHubViewModel) {
             UserResultScreen(username = username, viewModel = viewModel, navController = navController)
         }
 
-        // 📄 Repository Detail Screen
+        // Repo Detail Screen
         composable(
             route = "${Screen.RepoDetail.route}?repoJson={repoJson}",
             arguments = listOf(navArgument("repoJson") { type = NavType.StringType })
@@ -64,9 +74,9 @@ fun AppNavGraph(viewModel: GitHubViewModel) {
             RepoDetailScreen(repo = repo, viewModel = viewModel)
         }
 
-        // 👤 Logged-In GitHub Profile (Authenticated)
+        // Authenticated GitHub Profile
         composable(Screen.AuthenticatedProfile.route) {
-            UserProfileScreen() // This is the correct composable
+            UserProfileScreen(navController = navController)
         }
     }
 }

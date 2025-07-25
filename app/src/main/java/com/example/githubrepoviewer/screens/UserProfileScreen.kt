@@ -1,121 +1,172 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.example.githubrepoviewer.screens
 
 import android.util.Log
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import com.example.githubrepoviewer.data.RetrofitClient
 import com.example.githubrepoviewer.model.User
+import com.example.githubrepoviewer.model.Repo
+import com.example.githubrepoviewer.navigation.Screen
 import com.example.githubrepoviewer.util.TokenStore
-import kotlinx.coroutines.launch
+import com.example.githubrepoviewer.viewmodel.GitHubViewModel
+import com.google.gson.Gson
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @Composable
-fun UserProfileScreen() {
+fun UserProfileScreen(
+    navController: NavController,
+    viewModel: GitHubViewModel = viewModel()
+) {
     val context = LocalContext.current
     val tokenStore = remember { TokenStore(context) }
-    val coroutineScope = rememberCoroutineScope()
 
-    var user by remember { mutableStateOf<User?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+    val userProfile by viewModel.userProfile.collectAsState()
+    val repos by viewModel.repos.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
 
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            try {
-                val token = tokenStore.getToken()
-                Log.d("ProfileScreen", "Retrieved token: $token")
-
-                if (token.isNullOrBlank()) {
-                    error = "🔒 You are not logged in."
-                } else {
-                    val authHeader = "Bearer $token"
-                    val userAgent = "GitHubRepoViewer"
-
-                    user = RetrofitClient.api.getAuthenticatedUserProfile(
-                        authHeader = authHeader,
-                        userAgent = userAgent
-                    )
-
-                    Log.d("ProfileScreen", "Loaded user: ${user?.login}")
-                }
-            } catch (e: Exception) {
-                error = "⚠️ Failed to load profile: ${e.message?.take(150)}"
-                Log.e("ProfileScreen", "Error: ${e.message}", e)
-            } finally {
-                loading = false
-            }
+        val token = tokenStore.getToken()
+        if (!token.isNullOrBlank()) {
+            viewModel.fetchAuthenticatedUserProfile(token)
         }
     }
 
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        when {
-            loading -> CircularProgressIndicator()
-            error != null -> Text(text = error ?: "Unknown error", color = MaterialTheme.colorScheme.error)
-            user != null -> UserProfileContent(user!!)
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("My GitHub Profile") })
+        }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
+            when {
+                isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                error != null -> Text(error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.Center))
+                userProfile != null -> {
+                    UserProfileContent(userProfile!!, repos, navController)
+                }
+                else -> {
+                    Text("You are not logged in.", modifier = Modifier.align(Alignment.Center))
+                }
+            }
         }
     }
 }
 
 @Composable
-fun UserProfileContent(user: User) {
+fun UserProfileContent(user: User, repos: List<Repo>, navController: NavController) {
+    val realRepoCount = repos.size
+
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
     ) {
-        Image(
-            painter = rememberAsyncImagePainter(user.avatar_url),
-            contentDescription = "User Avatar",
-            modifier = Modifier
-                .size(100.dp)
-                .padding(bottom = 12.dp)
-        )
-
-        Text(
-            text = user.name ?: "No Name",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-
-        Text(
-            text = "@${user.login}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (!user.bio.isNullOrBlank()) {
-            Text(
-                text = user.bio!!,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(6.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = rememberAsyncImagePainter(user.avatar_url),
+                    contentDescription = "User Avatar",
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(user.name ?: user.login, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("@${user.login}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        if (!user.bio.isNullOrBlank()) {
+            Text("Bio", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(user.bio!!, style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        Divider()
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("Stats", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+
         Row(
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            ProfileStat("Repos", user.publicRepos.toString())
+            ProfileStat("Repos", realRepoCount.toString())
             ProfileStat("Followers", user.followers.toString())
             ProfileStat("Following", user.following.toString())
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Divider()
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text("Repositories", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (repos.isEmpty()) {
+            Text("No public repositories found.")
+        } else {
+            repos.forEach { repo ->
+                RepoItemClickable(repo = repo, onClick = {
+                    val encoded = URLEncoder.encode(Gson().toJson(repo), StandardCharsets.UTF_8.toString())
+                    navController.navigate(Screen.RepoDetail.createRoute(repo))
+                })
+            }
+        }
+    }
+}
+
+@Composable
+fun RepoItemClickable(repo: Repo, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .clickable { onClick() },
+        elevation = CardDefaults.cardElevation(4.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(text = repo.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (!repo.description.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(repo.description!!, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text("⭐ ${repo.stargazers_count}    🍴 ${repo.forks_count}", style = MaterialTheme.typography.labelSmall)
         }
     }
 }

@@ -2,8 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    // Add if using kotlinx serialization in the future
-    // id("org.jetbrains.kotlin.plugin.serialization") version "1.9.0"
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.10" // ✅ Ensure this matches your Kotlin version
 }
 
 android {
@@ -54,7 +53,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.2")
 
-    // Compose BOM (ensures all versions are compatible)
+    // Compose BOM
     implementation(platform("androidx.compose:compose-bom:2023.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -68,30 +67,38 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Coil for image loading in Compose
+    // Coil for Compose image loading
     implementation("io.coil-kt:coil-compose:2.4.0")
 
-    // ViewModel with Compose support
+    // ViewModel for Compose
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
     // Pull to refresh
     implementation("com.google.accompanist:accompanist-swiperefresh:0.31.6-rc")
 
-    // Navigation
+    // Navigation for Compose
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // Markdown rendering in Compose
     implementation("com.github.jeziellago:compose-markdown:0.3.4")
 
-    // ✅ Ktor Client for calling Render OAuth Proxy
-    implementation("io.ktor:ktor-client-core:2.3.0")
-    implementation("io.ktor:ktor-client-cio:2.3.0")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.0")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
+    // Ktor Client for GitHub token test
+    implementation("io.ktor:ktor-client-core:2.3.5")
+    implementation("io.ktor:ktor-client-cio:2.3.5")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.5")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.5")
 
-    // DataStore (for saving OAuth token)
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+
+    // DataStore for saving tokens
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // Logging interceptor (for debugging HTTP)
+    implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
+
+    //FlowRow
+    implementation("com.google.accompanist:accompanist-flowlayout:0.28.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

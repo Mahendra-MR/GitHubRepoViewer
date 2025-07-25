@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.githubrepoviewer.data.RetrofitClient
 import com.example.githubrepoviewer.navigation.AppNavGraph
+import com.example.githubrepoviewer.navigation.Screen
 import com.example.githubrepoviewer.util.TokenStore
 import com.example.githubrepoviewer.viewmodel.GitHubViewModel
 import io.ktor.client.*
@@ -17,6 +18,7 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
@@ -32,12 +34,18 @@ class MainActivity : ComponentActivity() {
         tokenStore = TokenStore(applicationContext)
         RetrofitClient.init(applicationContext)
 
+        val shouldNavigateToDashboard = intent?.getBooleanExtra("navigate_to_dashboard", false) ?: false
+
         setContent {
             val viewModel: GitHubViewModel = viewModel()
-            AppNavGraph(viewModel = viewModel)
+            if (shouldNavigateToDashboard) {
+                AppNavGraph(viewModel = viewModel, startDestination = Screen.Dashboard.route)
+            } else {
+                AppNavGraph(viewModel = viewModel)
+            }
         }
 
-        // ✅ Manually trigger onNewIntent to catch the redirect after browser login
+        // Catch browser redirect and handle token
         onNewIntent(intent)
     }
 
@@ -50,8 +58,12 @@ class MainActivity : ComponentActivity() {
         intent?.data?.let { uri ->
             if (uri.scheme == "myapp" && uri.host == "callback") {
                 val code = uri.getQueryParameter("code")
+                val error = uri.getQueryParameter("error")
+
                 if (!code.isNullOrEmpty()) {
                     exchangeCodeForToken(code)
+                } else if (!error.isNullOrEmpty()) {
+                    Log.e("OAuth", "OAuth error: $error")
                 }
             }
         }
@@ -75,13 +87,31 @@ class MainActivity : ComponentActivity() {
 
                 val responseText = response.body<String>()
                 val json = JSONObject(responseText)
-                val accessToken = json.getString("access_token")
 
-                tokenStore.saveToken(accessToken)
-                Log.d("OAuth", "✅ Access token saved successfully")
+                if (json.has("error")) {
+                    val error = json.getString("error")
+                    val description = json.optString("error_description", "")
+                    Log.e("OAuth", "Token exchange error: $error - $description")
+                    return@launch
+                }
+
+                if (json.has("access_token")) {
+                    val accessToken = json.getString("access_token")
+                    tokenStore.saveToken(accessToken)
+
+                    // Navigate directly to dashboard after login success
+                    val dashboardIntent = Intent(this@MainActivity, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        putExtra("navigate_to_dashboard", true)
+                    }
+                    startActivity(dashboardIntent)
+                    finish()
+                } else {
+                    Log.e("OAuth", "No access_token in response: $responseText")
+                }
 
             } catch (e: Exception) {
-                Log.e("OAuth", "❌ Token exchange failed: ${e.message}")
+                Log.e("OAuth", "Token exchange failed: ${e.message}", e)
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.example.githubrepoviewer.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.githubrepoviewer.model.Repo
@@ -9,7 +10,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
-import java.util.Base64
+
+// Ktor
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
 
 class GitHubViewModel : ViewModel() {
 
@@ -45,11 +55,13 @@ class GitHubViewModel : ViewModel() {
                 }
             } catch (e: HttpException) {
                 _repos.value = emptyList()
-                if (e.code() == 403) {
-                    checkRateLimit()
-                    _error.value = "Rate limit exceeded. Try again later."
-                } else {
-                    _error.value = if (e.code() == 404) "User not found!" else "Server error: ${e.code()}"
+                when (e.code()) {
+                    403 -> {
+                        checkRateLimit()
+                        _error.value = "Rate limit exceeded. Try again later."
+                    }
+                    404 -> _error.value = "User not found."
+                    else -> _error.value = "Server error: ${e.code()}"
                 }
             } catch (e: Exception) {
                 _repos.value = emptyList()
@@ -60,7 +72,6 @@ class GitHubViewModel : ViewModel() {
         }
     }
 
-    // 🔍 Public GitHub user profile fetch
     fun fetchUserProfile(username: String) {
         viewModelScope.launch {
             try {
@@ -68,7 +79,7 @@ class GitHubViewModel : ViewModel() {
             } catch (e: HttpException) {
                 _userProfile.value = null
                 _error.value = when (e.code()) {
-                    404 -> "User not found!"
+                    404 -> "User not found."
                     else -> "Error fetching profile: ${e.code()}"
                 }
             } catch (e: Exception) {
@@ -78,21 +89,38 @@ class GitHubViewModel : ViewModel() {
         }
     }
 
-    // ✅ FIXED: Authenticated GitHub user profile fetch with correct header format
     fun fetchAuthenticatedUserProfile(token: String) {
         viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            _userProfile.value = null
             try {
-                val bearerToken = "Bearer $token"
-                _userProfile.value = repository.getAuthenticatedUserProfile(bearerToken)
+                Log.d("GitHubViewModel", "Fetching authenticated profile with token: ${token.take(10)}...")
+                val user = repository.getAuthenticatedUserProfile(token)
+                _userProfile.value = user
+                Log.d("GitHubViewModel", "Authenticated user: ${user.login}")
+
+                // Also fetch their public repositories
+                val repos = repository.getUserRepos(user.login)
+                _repos.value = repos.sortedByDescending { it.updated_at }
+
             } catch (e: HttpException) {
+                Log.e("GitHubViewModel", "HTTP error ${e.code()}: ${e.message()}")
                 _userProfile.value = null
+                _repos.value = emptyList()
                 _error.value = when (e.code()) {
-                    401 -> "Unauthorized. Please login again."
-                    else -> "HTTP error ${e.code()}"
+                    401 -> "Authentication failed. Please login again."
+                    403 -> "Access forbidden. Check token permissions."
+                    404 -> "User not found."
+                    else -> "HTTP error ${e.code()}: ${e.message()}"
                 }
             } catch (e: Exception) {
+                Log.e("GitHubViewModel", "Network error: ${e.message}", e)
                 _userProfile.value = null
-                _error.value = "Error fetching authenticated profile: ${e.message}"
+                _repos.value = emptyList()
+                _error.value = "Network error: ${e.message}"
+            } finally {
+                _isLoading.value = false
             }
         }
     }
@@ -108,9 +136,11 @@ class GitHubViewModel : ViewModel() {
                 ?.replace("\\n", "")
 
             encodedContent?.let {
-                String(Base64.getDecoder().decode(it))
+                val decodedBytes = android.util.Base64.decode(it, android.util.Base64.DEFAULT)
+                decodedBytes.toString(Charsets.UTF_8)
             }
         } catch (e: Exception) {
+            Log.e("GitHubViewModel", "Error decoding README: ${e.message}")
             null
         }
     }
@@ -131,7 +161,7 @@ class GitHubViewModel : ViewModel() {
             val response = repository.getRateLimit()
             _rateLimitResetTime.value = response.rate.reset
         } catch (_: Exception) {
-            // Ignore silently
+            // Ignored silently
         }
     }
 
@@ -140,5 +170,36 @@ class GitHubViewModel : ViewModel() {
         _repos.value = emptyList()
         _error.value = null
         _rateLimitResetTime.value = null
+    }
+
+    suspend fun testTokenDirectly(token: String): String {
+        return try {
+            val client = HttpClient(CIO) {
+                install(ContentNegotiation) {
+                    json(Json { ignoreUnknownKeys = true })
+                }
+            }
+
+            Log.d("TokenTest", "Testing token: ${token.take(20)}...")
+
+            val response = client.get("https://api.github.com/user") {
+                header("Authorization", "Bearer $token")
+                header("User-Agent", "GitHubRepoViewer")
+            }
+
+            Log.d("TokenTest", "Response: ${response.status}")
+
+            if (response.status == HttpStatusCode.OK) {
+                val body = response.body<String>()
+                Log.d("TokenTest", "Token valid: ${body.take(200)}")
+                "Token is valid"
+            } else {
+                Log.e("TokenTest", "Token test failed: ${response.status}")
+                "Token test failed: ${response.status}"
+            }
+        } catch (e: Exception) {
+            Log.e("TokenTest", "Token test exception: ${e.message}")
+            "Token test exception: ${e.message}"
+        }
     }
 }

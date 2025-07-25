@@ -8,32 +8,35 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-// Define extension property for Context
+// Create a singleton DataStore instance using extension property
 val Context.dataStore by preferencesDataStore(name = "auth")
 
 class TokenStore(private val context: Context) {
 
     private val tokenKey = stringPreferencesKey("github_token")
 
-    // ✅ Reactive token flow
+    // Observe token changes
     val tokenFlow: Flow<String?> = context.dataStore.data
-        .map { prefs -> prefs[tokenKey] }
+        .map { preferences -> preferences[tokenKey] }
 
+    // Save token persistently
     suspend fun saveToken(token: String) {
-        context.dataStore.edit { prefs ->
-            prefs[tokenKey] = token
+        context.dataStore.edit { preferences ->
+            preferences[tokenKey] = token
         }
     }
 
+    // Read token once
     suspend fun getToken(): String? {
         return context.dataStore.data
-            .map { prefs -> prefs[tokenKey] }
+            .map { preferences -> preferences[tokenKey] }
             .first()
     }
 
+    // Clear token on logout
     suspend fun clearToken() {
-        context.dataStore.edit { prefs ->
-            prefs.remove(tokenKey)
+        context.dataStore.edit { preferences ->
+            preferences.remove(tokenKey)
         }
     }
 }

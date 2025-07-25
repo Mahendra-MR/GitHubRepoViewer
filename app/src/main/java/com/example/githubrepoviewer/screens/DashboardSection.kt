@@ -8,11 +8,12 @@ package com.example.githubrepoviewer.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
@@ -30,6 +31,7 @@ import androidx.navigation.NavController
 import com.example.githubrepoviewer.navigation.Screen
 import com.example.githubrepoviewer.util.TokenStore
 import com.example.githubrepoviewer.viewmodel.GitHubViewModel
+import com.google.accompanist.flowlayout.FlowRow
 import kotlinx.coroutines.launch
 
 @Composable
@@ -42,11 +44,9 @@ fun DashboardScreen(
     var username by remember { mutableStateOf(TextFieldValue("")) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val globalStats = viewModel.globalStats.collectAsState().value ?: (0 to 0)
-
-    // ✅ Observe login state reactively
     val tokenStore = remember { TokenStore(context) }
-    val token by tokenStore.tokenFlow.collectAsState(initial = null)
-    val isLoggedIn = !token.isNullOrBlank()
+
+    val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         viewModel.fetchGlobalGitHubStats()
@@ -55,18 +55,15 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("🚀 GitHub Repo Viewer") },
+                title = { Text("GitHub Repo Viewer") },
                 actions = {
                     SettingsMenu(
-                        isLoggedIn = isLoggedIn,
-                        onLogin = {
-                            val authUrl = "https://github-oauth-proxy-uuuo.onrender.com/login"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                            context.startActivity(intent)
-                        },
                         onLogout = {
                             scope.launch {
                                 tokenStore.clearToken()
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(Screen.Dashboard.route) { inclusive = true }
+                                }
                             }
                         },
                         onProfile = {
@@ -81,7 +78,8 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             SearchBar(username) { input ->
@@ -92,16 +90,15 @@ fun DashboardScreen(
             }
 
             GitHubStatsSection(globalStats)
+            TopLanguagesSection()
             InsightSection()
-            ContributionPlaceholder()
+            TrendingTopicsSection()
         }
     }
 }
 
 @Composable
 fun SettingsMenu(
-    isLoggedIn: Boolean,
-    onLogin: () -> Unit,
     onLogout: () -> Unit,
     onProfile: () -> Unit
 ) {
@@ -113,21 +110,19 @@ fun SettingsMenu(
 
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
         DropdownMenuItem(
-            text = { Text(if (isLoggedIn) "Logout" else "Login with GitHub") },
+            text = { Text("Logout") },
             onClick = {
                 expanded = false
-                if (isLoggedIn) onLogout() else onLogin()
+                onLogout()
             }
         )
-        if (isLoggedIn) {
-            DropdownMenuItem(
-                text = { Text("My GitHub Profile") },
-                onClick = {
-                    expanded = false
-                    onProfile()
-                }
-            )
-        }
+        DropdownMenuItem(
+            text = { Text("My GitHub Profile") },
+            onClick = {
+                expanded = false
+                onProfile()
+            }
+        )
     }
 }
 
@@ -170,7 +165,7 @@ fun SearchBar(username: TextFieldValue, onSearch: (String) -> Unit) {
 @Composable
 fun GitHubStatsSection(globalStats: Pair<Int, Int>) {
     Column {
-        Text("🌍 GitHub Global Stats", style = MaterialTheme.typography.titleMedium)
+        Text("GitHub Global Stats", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -211,34 +206,72 @@ fun StatCard(title: String, value: String) {
 }
 
 @Composable
-fun InsightSection() {
+fun TopLanguagesSection() {
+    val languages = listOf("JavaScript", "Python", "Java", "TypeScript", "C++", "Go", "Rust", "Kotlin")
+
     Column {
-        Text("💡 Developer Fun Fact", style = MaterialTheme.typography.titleMedium)
+        Text("Most Popular Languages", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "Every minute, hundreds of stars are given to GitHub repos around the world 🌟",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        FlowRow(
+            mainAxisSpacing = 12.dp,
+            crossAxisSpacing = 8.dp
+        ) {
+            languages.forEach { lang ->
+                AssistChip(
+                    onClick = { /* Navigate to filtered search by language */ },
+                    label = { Text(lang) }
+                )
+            }
+        }
     }
 }
 
 @Composable
-fun ContributionPlaceholder() {
+fun InsightSection() {
+    val funFacts = listOf(
+        "Every minute, hundreds of ⭐ stars are given to GitHub repos around the world.",
+        "Linus Torvalds created Git in 2005 to manage the Linux kernel.",
+        "GitHub was founded in 2008 and acquired by Microsoft in 2018.",
+        "Octocat, GitHub’s mascot, has over 40 official versions.",
+        "There are over 370 million public GitHub repositories!",
+        "GitHub Copilot is powered by OpenAI and suggests code as you type.",
+        "Python has been the most forked language in recent years.",
+        "GitHub Actions allows automation directly inside your repos.",
+        "The term 'bug' originated from a real moth found in a computer in 1947.",
+        "The first website ever created is still online at info.cern.ch"
+    )
+
     Column {
-        Text("📈 Contribution Overview", style = MaterialTheme.typography.titleMedium)
+        Text("Developer Fun Facts", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
+
+        funFacts.take(5).forEach { fact ->
             Text(
-                "User contribution graph will appear here upon profile search.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "• $fact",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun TrendingTopicsSection() {
+    val topics = listOf("machine-learning", "android", "web3", "game-dev", "docker", "devops", "ai", "security")
+
+    Column {
+        Text("Trending Topics", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        FlowRow(
+            mainAxisSpacing = 12.dp,
+            crossAxisSpacing = 8.dp
+        ) {
+            topics.forEach { topic ->
+                SuggestionChip(
+                    onClick = { /* Navigate to topic */ },
+                    label = { Text("#$topic") }
+                )
+            }
         }
     }
 }
