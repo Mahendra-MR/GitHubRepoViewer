@@ -15,28 +15,24 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
 import coil.compose.rememberAsyncImagePainter
 import com.example.githubrepoviewer.model.Repo
 import com.example.githubrepoviewer.viewmodel.GitHubViewModel
+import dev.jeziellago.compose.markdowntext.MarkdownText
 
 @Composable
 fun RepoDetailScreen(repo: Repo, viewModel: GitHubViewModel) {
     val context = LocalContext.current
-    var readmeText by remember { mutableStateOf("Loading...") }
+    var readmeText by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(true) }
 
-    // Fetch README content if no description is available
+    // Fetch README regardless of description
     LaunchedEffect(repo) {
-        if (repo.description.isNullOrBlank()) {
-            val readme = viewModel.fetchRepoReadme(repo.owner.login, repo.name)
-            readmeText = readme?.let {
-                // Clean raw markdown minimally, optionally enhance with formatting libraries later
-                it.replace(Regex("<[^>]*>"), "")
-                    .replace(Regex("(?m)^#+\\s*"), "") // Remove markdown headers
-                    .replace(Regex("\\[(.*?)\\]\\(.*?\\)"), "$1") // [text](url) → text
-                    .replace("```", "")
-                    .trim()
-            } ?: "No description available."
-        }
+        isLoading = true
+        val readme = viewModel.fetchRepoReadme(repo.owner.login, repo.name)
+        readmeText = readme.orEmpty()
+        isLoading = false
     }
 
     Scaffold { paddingValues ->
@@ -48,11 +44,15 @@ fun RepoDetailScreen(repo: Repo, viewModel: GitHubViewModel) {
                 .padding(16.dp)
         ) {
             // Repo title
-            Text(text = repo.name, style = MaterialTheme.typography.headlineMedium)
+            Text(
+                text = repo.name,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
             Spacer(modifier = Modifier.height(12.dp))
 
             // Owner info
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
                     painter = rememberAsyncImagePainter(repo.owner.avatar_url),
                     contentDescription = "Owner Avatar",
@@ -91,11 +91,24 @@ fun RepoDetailScreen(repo: Repo, viewModel: GitHubViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Description or full README
-            Text(
-                text = repo.description ?: readmeText,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            // Repo description (if available)
+            repo.description?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Render README if available
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            } else if (readmeText.isNotBlank()) {
+                MarkdownText(
+                    markdown = readmeText,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }

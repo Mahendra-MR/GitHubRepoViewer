@@ -100,6 +100,9 @@ dependencies {
     //FlowRow
     implementation("com.google.accompanist:accompanist-flowlayout:0.28.0")
 
+    //Markdown
+    implementation("com.github.jeziellago:compose-markdown:0.2.1")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
